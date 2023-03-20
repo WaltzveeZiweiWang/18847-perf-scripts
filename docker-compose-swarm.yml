@@ -1,0 +1,713 @@
+version: "3.8"
+
+services:
+  jaeger-agent:
+    image: jaegertracing/jaeger-agent:latest
+    hostname: jaeger-agent
+    command: ["--reporter.grpc.host-port=jaeger-collector:14250"]
+    deploy:
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${jaeger_agent_cpu}
+          memory: ${jaeger_agent_memory}
+        # reservations:
+        #   cpus: ${jaeger_agent_cpu}
+        #   memory: ${jaeger_agent_memory}
+      placement:
+        constraints: ["${jaeger_agent_placement}"]
+    depends_on:
+      - jaeger-collector
+
+  compose-post-service:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${compose_post_service_cpu}
+          memory: ${compose_post_service_memory}
+        # reservations:
+        #   cpus: ${compose_post_service_cpu}
+        #   memory: ${compose_post_service_memory}
+      placement:
+        constraints: ["${compose_post_service_placement}"]
+    command: ["ComposePostService"]
+    hostname: compose-post-service
+    image: yg397/social-network-microservices:latest
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+
+  home-timeline-redis:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    hostname: home-timeline-redis
+    image: redis
+    command: "redis-server /social-network-microservices/config/redis.conf"
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+    deploy:
+      resources:
+        limits:
+          cpus: ${home_timeline_redis_cpu}
+          memory: ${home_timeline_redis_memory}
+        # reservations:
+        #   cpus: ${home_timeline_redis_cpu}
+        #   memory: ${home_timeline_redis_memory}
+      placement:
+        constraints: ["${home_timeline_redis_placement}"]
+
+  home-timeline-service:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${home_timeline_service_cpu}
+          memory: ${home_timeline_service_memory}
+        # reservations:
+        #   cpus: ${home_timeline_service_cpu}
+        #   memory: ${home_timeline_service_memory}
+      placement:
+        constraints: ["${home_timeline_service_placement}"]
+    command: ["HomeTimelineService"]
+    hostname: home-timeline-service
+    image: yg397/social-network-microservices:latest
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+
+  media-frontend:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${media_frontend_cpu}
+          memory: ${media_frontend_memory}
+        # reservations:
+        #   cpus: ${media_frontend_cpu}
+        #   memory: ${media_frontend_memory}
+      placement:
+        constraints: ["${media_frontend_placement}"]
+    hostname: media-frontend
+    image: yg397/media-frontend:xenial
+    ports:
+      - 8081:8080
+    volumes:
+      - ./media-frontend/lua-scripts:/usr/local/openresty/nginx/lua-scripts
+      - ./media-frontend/conf/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+
+  media-memcached:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    hostname: media-memcached
+    image: memcached
+    command:
+      - "-m 16384"
+      - "-t 8"
+      - "-I 32m"
+      - "-c 4096"
+    deploy:
+      resources:
+        limits:
+          cpus: ${media_memcached_cpu}
+          memory: ${media_memcached_memory}
+        # reservations:
+        #   cpus: ${media_memcached_cpu}
+        #   memory: ${media_memcached_memory}
+      placement:
+        constraints: ["${media_memcached_placement}"]
+
+  media-mongodb:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    hostname: media-mongodb
+    image: mongo:4.4.6
+    command: "mongod --nojournal --quiet --config /social-network-microservices/config/mongod.conf"
+    # command: "mongod --serviceExecutor adaptive --listenBacklog 1024 --syncdelay 3600 --wiredTigerCacheSizeGB 2"
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+    deploy:
+      resources:
+        limits:
+          cpus: ${media_mongodb_cpu}
+          memory: ${media_mongodb_memory}
+        # reservations:
+        #   cpus: ${media_mongodb_cpu}
+        #   memory: ${media_mongodb_memory}
+      placement:
+        constraints: ["${media_mongodb_placement}"]
+
+  media-service:
+    depends_on:
+      - media-mongodb
+      - jaeger-agent
+      - jaeger-query
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${media_service_cpu}
+          memory: ${media_service_memory}
+        # reservations:
+        #   cpus: ${media_service_cpu}
+        #   memory: ${media_service_memory}
+      placement:
+        constraints: ["${media_service_placement}"]
+    command: ["MediaService"]
+    hostname: media-service
+    image: yg397/social-network-microservices:latest
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+
+  nginx-web-server:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${nginx_web_server_cpu}
+          memory: ${nginx_web_server_memory}
+        # reservations:
+        #   cpus: ${nginx_web_server_cpu}
+        #   memory: ${nginx_web_server_memory}
+      placement:
+        constraints: ["${nginx_web_server_placement}"]
+    hostname: nginx-web-server
+    image: yg397/openresty-thrift:xenial
+    ports:
+      - 8080:8080
+    volumes:
+      - ./nginx-web-server/lua-scripts:/usr/local/openresty/nginx/lua-scripts
+      - ./nginx-web-server/pages:/usr/local/openresty/nginx/pages
+      - ./nginx-web-server/conf/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      - ./nginx-web-server/jaeger-config.json:/usr/local/openresty/nginx/jaeger-config.json
+      - ./gen-lua:/gen-lua
+      - ./docker/openresty-thrift/lua-thrift:/usr/local/openresty/lualib/thrift
+      - ./keys:/keys
+
+  post-storage-memcached:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    hostname: post-storage-memcached
+    image: memcached
+    command:
+      - "-m 16384"
+      - "-t 8"
+      - "-I 32m"
+      - "-c 4096"
+    deploy:
+      resources:
+        limits:
+          cpus: ${post_storage_memcached_cpu}
+          memory: ${post_storage_memcached_memory}
+        # reservations:
+        #   cpus: ${post_storage_memcached_cpu}
+        #   memory: ${post_storage_memcached_memory}
+      placement:
+        constraints: ["${post_storage_memcached_placement}"]
+
+  post-storage-mongodb:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    hostname: post-storage-mongodb
+    image: mongo:4.4.6
+    command: "mongod --nojournal --quiet --config /social-network-microservices/config/mongod.conf"
+    # command: "mongod --serviceExecutor adaptive --listenBacklog 1024 --syncdelay 3600 --wiredTigerCacheSizeGB 75"
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+    deploy:
+      resources:
+        limits:
+          cpus: ${post_storage_mongodb_cpu}
+          memory: ${post_storage_mongodb_memory}
+        # reservations:
+        #   cpus: ${post_storage_mongodb_cpu}
+        #   memory: ${post_storage_mongodb_memory}
+      placement:
+        constraints: ["${post_storage_mongodb_placement}"]
+
+  post-storage-service:
+    depends_on:
+      - post-storage-mongodb
+      - jaeger-agent
+      - jaeger-query
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${post_storage_service_cpu}
+          memory: ${post_storage_service_memory}
+        # reservations:
+        #   cpus: ${post_storage_service_cpu}
+        #   memory: ${post_storage_service_memory}
+      placement:
+        constraints: ["${post_storage_service_placement}"]
+    command: ["PostStorageService"]
+    hostname: post-storage-service
+    image: yg397/social-network-microservices:latest
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+
+  social-graph-mongodb:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    hostname: social-graph-mongodb
+    image: mongo:4.4.6
+    command: "mongod --nojournal --quiet --config /social-network-microservices/config/mongod.conf"
+    # command: "mongod --serviceExecutor adaptive --listenBacklog 1024 --syncdelay 3600 --wiredTigerCacheSizeGB 16"
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+    deploy:
+      resources:
+        limits:
+          cpus: ${social_graph_mongodb_cpu}
+          memory: ${social_graph_mongodb_memory}
+        # reservations:
+        #   cpus: ${social_graph_mongodb_cpu}
+        #   memory: ${social_graph_mongodb_memory}
+      placement:
+        constraints: ["${social_graph_mongodb_placement}"]
+
+  social-graph-redis:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    hostname: social-graph-redis
+    image: redis
+    command: "redis-server /social-network-microservices/config/redis.conf"
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+    deploy:
+      resources:
+        limits:
+          cpus: ${social_graph_redis_cpu}
+          memory: ${social_graph_redis_memory}
+        # reservations:
+        #   cpus: ${social_graph_redis_cpu}
+        #   memory: ${social_graph_redis_memory}
+      placement:
+        constraints: ["${social_graph_redis_placement}"]
+
+  social-graph-service:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+      - social-graph-mongodb
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${social_graph_service_cpu}
+          memory: ${social_graph_service_memory}
+        # reservations:
+        #   cpus: ${social_graph_service_cpu}
+        #   memory: ${social_graph_service_memory}
+      placement:
+        constraints: ["${social_graph_service_placement}"]
+    command: ["SocialGraphService"]
+    hostname: social-graph-service
+    image: yg397/social-network-microservices:latest
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+
+  text-service:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${text_service_cpu}
+          memory: ${text_service_memory}
+        # reservations:
+        #   cpus: ${text_service_cpu}
+        #   memory: ${text_service_memory}
+      placement:
+        constraints: ["${text_service_placement}"]
+    command: ["TextService"]
+    hostname: text-service
+    image: yg397/social-network-microservices:latest
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+
+  unique-id-service:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${unique_id_service_cpu}
+          memory: ${unique_id_service_memory}
+        # reservations:
+        #   cpus: ${unique_id_service_cpu}
+        #   memory: ${unique_id_service_memory}
+      placement:
+        constraints: ["${unique_id_service_placement}"]
+    command: ["UniqueIdService"]
+    hostname: unique-id-service
+    image: yg397/social-network-microservices:latest
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+
+  url-shorten-memcached:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    hostname: url-shorten-memcached
+    image: memcached
+    command:
+      - "-m 16384"
+      - "-t 8"
+      - "-I 32m"
+      - "-c 4096"
+    deploy:
+      resources:
+        limits:
+          cpus: ${url_shorten_memcached_cpu}
+          memory: ${url_shorten_memcached_memory}
+        # reservations:
+        #   cpus: ${url_shorten_memcached_cpu}
+        #   memory: ${url_shorten_memcached_memory}
+      placement:
+        constraints: ["${url_shorten_memcached_placement}"]
+
+  url-shorten-mongodb:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    hostname: url-shorten-mongodb
+    image: mongo:4.4.6
+    command: "mongod --nojournal --quiet --config /social-network-microservices/config/mongod.conf"
+    # command: "mongod --serviceExecutor adaptive --listenBacklog 1024 --syncdelay 3600 --wiredTigerCacheSizeGB 36"
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+    deploy:
+      resources:
+        limits:
+          cpus: ${url_shorten_mongodb_cpu}
+          memory: ${url_shorten_mongodb_memory}
+        # reservations:
+        #   cpus: ${url_shorten_mongodb_cpu}
+        #   memory: ${url_shorten_mongodb_memory}
+      placement:
+        constraints: ["${url_shorten_mongodb_placement}"]
+
+  url-shorten-service:
+    depends_on:
+      - url-shorten-mongodb
+      - jaeger-agent
+      - jaeger-query
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${url_shorten_service_cpu}
+          memory: ${url_shorten_service_memory}
+        # reservations:
+        #   cpus: ${url_shorten_service_cpu}
+        #   memory: ${url_shorten_service_memory}
+      placement:
+        constraints: ["${url_shorten_service_placement}"]
+    command: ["UrlShortenService"]
+    hostname: url-shorten-service
+    image: yg397/social-network-microservices:latest
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+
+  user-memcached:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    hostname: user-memcached
+    image: memcached
+    command:
+      - "-m 16384"
+      - "-t 8"
+      - "-I 32m"
+      - "-c 4096"
+    deploy:
+      resources:
+        limits:
+          cpus: ${user_memcached_cpu}
+          memory: ${user_memcached_memory}
+        # reservations:
+        #   cpus: ${user_memcached_cpu}
+        #   memory: ${user_memcached_memory}
+      placement:
+        constraints: ["${user_memcached_placement}"]
+
+  user-mention-service:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${user_mention_service_cpu}
+          memory: ${user_mention_service_memory}
+        # reservations:
+        #   cpus: ${user_mention_service_cpu}
+        #   memory: ${user_mention_service_memory}
+      placement:
+        constraints: ["${user_mention_service_placement}"]
+    command: ["UserMentionService"]
+    hostname: user-mention-service
+    image: yg397/social-network-microservices:latest
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+
+  user-mongodb:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    hostname: user-mongodb
+    image: mongo:4.4.6
+    command: "mongod --nojournal --quiet --config /social-network-microservices/config/mongod.conf"
+    # command: "mongod --serviceExecutor adaptive --listenBacklog 1024 --syncdelay 3600 --wiredTigerCacheSizeGB 8"
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+    deploy:
+      resources:
+        limits:
+          cpus: ${user_mongodb_cpu}
+          memory: ${user_mongodb_memory}
+        # reservations:
+        #   cpus: ${user_mongodb_cpu}
+        #   memory: ${user_mongodb_memory}
+      placement:
+        constraints: ["${user_mongodb_placement}"]
+
+  user-service:
+    depends_on:
+      - user-mongodb
+      - jaeger-agent
+      - jaeger-query
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${user_service_cpu}
+          memory: ${user_service_memory}
+        # reservations:
+        #   cpus: ${user_service_cpu}
+        #   memory: ${user_service_memory}
+      placement:
+        constraints: ["${user_service_placement}"]
+    command: ["UserService"]
+    hostname: user-service
+    image: yg397/social-network-microservices:latest
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+
+  user-timeline-mongodb:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    hostname: user-timeline-mongodb
+    image: mongo:4.4.6
+    command: "mongod --nojournal --quiet --config /social-network-microservices/config/mongod.conf"
+    # command: "mongod --serviceExecutor adaptive --listenBacklog 1024 --syncdelay 3600 --wiredTigerCacheSizeGB 75"
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+    deploy:
+      resources:
+        limits:
+          cpus: ${user_timeline_mongodb_cpu}
+          memory: ${user_timeline_mongodb_memory}
+        # reservations:
+        #   cpus: ${user_timeline_mongodb_cpu}
+        #   memory: ${user_timeline_mongodb_memory}
+      placement:
+        constraints: ["${user_timeline_mongodb_placement}"]
+
+  user-timeline-redis:
+    depends_on:
+      - jaeger-agent
+      - jaeger-query
+    hostname: user-timeline-redis
+    image: redis
+    command: "redis-server /social-network-microservices/config/redis.conf"
+    volumes:
+      - ./config:/social-network-microservices/config
+      - ./keys:/keys
+    deploy:
+      resources:
+        limits:
+          cpus: ${user_timeline_redis_cpu}
+          memory: ${user_timeline_redis_memory}
+        # reservations:
+        #   cpus: ${user_timeline_redis_cpu}
+        #   memory: ${user_timeline_redis_memory}
+      placement:
+        constraints: ["${user_timeline_redis_placement}"]
+
+  user-timeline-service:
+    depends_on:
+      - user-timeline-mongodb
+      - jaeger-agent
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${user_timeline_service_cpu}
+          memory: ${user_timeline_service_memory}
+        # reservations:
+        #   cpus: ${user_timeline_service_cpu}
+        #   memory: ${user_timeline_service_memory}
+      placement:
+        constraints: ["${user_timeline_service_placement}"]
+    command: ["UserTimelineService"]
+    hostname: user-timeline-service
+    image: yg397/social-network-microservices:latest
+    volumes:
+      - ./config:/social-network-microservices/config
+
+  jaeger-collector:
+    image: jaegertracing/jaeger-collector
+    command:
+      [
+        "--cassandra.keyspace=jaeger_v1_dc1",
+        "--cassandra.servers=cassandra",
+        "--collector.zipkin.host-port=9411",
+        "--collector.num-workers=100",
+        "--collector.queue-size=100000"
+      ]
+    ports:
+      - "14269:14269"
+    deploy:
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${jaeger_collector_cpu}
+          memory: ${jaeger_collector_memory}
+        # reservations:
+        #   cpus: ${jaeger_collector_cpu}
+        #   memory: ${jaeger_collector_memory}
+      placement:
+        constraints: ["${jaeger_collector_placement}"]
+    depends_on:
+      - cassandra-schema
+
+  jaeger-query:
+    image: jaegertracing/jaeger-query
+    command:
+      ["--cassandra.keyspace=jaeger_v1_dc1", "--cassandra.servers=cassandra"]
+    ports:
+      - "16686:16686"
+    deploy:
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          cpus: ${jaeger_query_cpu}
+          memory: ${jaeger_query_memory}
+        # reservations:
+        #   cpus: ${jaeger_query_cpu}
+        #   memory: ${jaeger_query_memory}
+      placement:
+        constraints: ["${jaeger_query_placement}"]
+    depends_on:
+      - cassandra-schema
+
+  cassandra-schema:
+    image: jaegertracing/jaeger-cassandra-schema
+    deploy:
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: ${cassandra_schema_cpu}
+          memory: ${cassandra_schema_memory}
+        # reservations:
+        #   cpus: ${cassandra_schema_cpu}
+        #   memory: ${cassandra_schema_memory}
+      placement:
+        constraints: ["${cassandra_schema_placement}"]
+    depends_on:
+      - cassandra
+
+  cassandra:
+    image: cassandra:3.9
+    deploy:
+      resources:
+        limits:
+          cpus: ${cassandra_cpu}
+          memory: ${cassandra_memory}
+        # reservations:
+        #   cpus: ${cassandra_cpu}
+        #   memory: ${cassandra_memory}
+      placement:
+        constraints: ["${cassandra_placement}"]
+
+networks:
+  default:
+    driver: overlay
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.11.0.0/16
