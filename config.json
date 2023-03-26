@@ -15,11 +15,11 @@
             "service_workloads": [
                 {
                     "workload_type": "compose", 
-                    "workload_cmd": "./wrk -D exp -t{} -c100 -d{}s -R{} -L -s ./scripts/social-network/compose-post.lua http://127.0.0.1:8080/index.html"
+                    "workload_cmd": "../wrk2/wrk -D exp -t{} -c100 -d{}s -R{} -L -s ./scripts/social-network/compose-post.lua http://127.0.0.1:8080/index.html"
                 }, 
                 {
                     "workload_type": "mixed", 
-                    "workload_cmd": "./wrk -D exp -t{} -c100 -d{}s -R{} -L -s ./scripts/social-network/mixed-workload.lua http://127.0.0.1:8080/wrk2-api/"
+                    "workload_cmd": "../wrk2/wrk -D exp -t{} -c100 -d{}s -R{} -L -s ./scripts/social-network/mixed-workload.lua http://127.0.0.1:8080/wrk2-api/"
                 }
             ]
         }
