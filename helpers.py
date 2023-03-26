@@ -26,8 +26,8 @@ def finditem(obj, key):
 def get_ssh_cmd(node, cmd, background=False, cd="~"):
     if background:
         # run command in background with nohup and redirect stdout and stderr to /dev/null and return pid
-        return f"ssh {NO_KEY} {node} \"cd {cd}; sh -c 'nohup {cmd} > /dev/null 2>&1 &'\""
-    return f"ssh {NO_KEY} {node} \"cd {cd}; {cmd}\""
+        return f"ssh -i /users/waltzvee/id_rsa {NO_KEY} {node} \"cd {cd}; sh -c 'nohup {cmd} > /dev/null 2>&1 &'\""
+    return f"ssh -i /users/waltzvee/id_rsa {NO_KEY} {node} \"cd {cd}; {cmd}\""
 
 def run_ssh_cmd(node, cmd, stderr=True, background=False, cd="~", check=False):
     cp = subprocess.run(get_ssh_cmd(node, cmd, background=background, cd=cd), 
