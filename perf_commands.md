@@ -19,3 +19,10 @@ sudo perf record -p <PID> --call-graph lbr -- ./wrk -D exp -t 2 -c100 -d30s -R28
 sudo perf report --pid <PID> > ~/report-lbr.txt
 
 ```
+
+# Generate FlameGraph
+```
+git clone https://github.com/brendangregg/FlameGraph.git
+sudo perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > ~/output.svg
+
+```
